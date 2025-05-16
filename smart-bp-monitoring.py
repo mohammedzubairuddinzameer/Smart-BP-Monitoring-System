@@ -1,162 +1,97 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import os
-import sqlite3
-import hashlib
-import matplotlib.pyplot as plt
+import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-from datetime import datetime
 
 # --- Page Config ---
-st.set_page_config(page_title="Smart BP Monitoring", layout="wide")
+st.set_page_config(page_title="Personalized Blood Pressure Prediction", layout="centered")
 
-# --- CSS Styling ---
+# --- CSS for Modern UI ---
 st.markdown("""
     <style>
-        body {
-            background-color: #f4f4f9;
-            color: #1e1e1e;
-        }
-        .main {
-            background-color: #ffffff;
-            padding: 2rem;
-            border-radius: 10px;
-        }
-        .stButton > button {
-            color: white;
-            background-color: #3366cc;
-            border-radius: 5px;
-        }
+    .main {
+        background-color: #ffffff;
+        padding: 3rem;
+        border-radius: 10px;
+    }
+    .stTextInput>div>div>input {
+        background-color: #f9f9f9;
+        padding: 10px;
+        font-size: 16px;
+        border-radius: 8px;
+    }
+    .stButton>button {
+        background-color: #ff4b4b;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 10px 24px;
+        margin-top: 20px;
+    }
+    h1, h2, h3 {
+        color: #1e1e1e;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Database Connection ---
-def get_connection():
-    conn = sqlite3.connect("bp_data.db", check_same_thread=False)
-    return conn, conn.cursor()
+# --- Mock Model Training (you can replace with actual trained model) ---
+def train_dummy_model():
+    np.random.seed(42)
+    data = {
+        "age": np.random.randint(20, 80, 300),
+        "weight": np.random.randint(40, 100, 300),
+        "height": np.random.randint(150, 190, 300),
+        "bmi": np.random.uniform(18.0, 35.0, 300),
+        "heart_rate": np.random.randint(60, 100, 300)
+    }
+    df = pd.DataFrame(data)
+    df["systolic"] = 100 + 0.5 * df["age"] + 0.2 * df["weight"] - 0.1 * df["height"] + 0.3 * df["heart_rate"]
+    df["diastolic"] = 60 + 0.3 * df["age"] + 0.1 * df["weight"] - 0.2 * df["height"] + 0.4 * df["heart_rate"]
 
-# --- Save patient data to database ---
-def save_to_database(age, gender, systolic, diastolic, heart_rate, sleep, activity, prediction):
-    conn, cursor = get_connection()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS bp_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            age INTEGER,
-            gender TEXT,
-            systolic REAL,
-            diastolic REAL,
-            heart_rate INTEGER,
-            sleep REAL,
-            activity REAL,
-            predicted_bp REAL,
-            timestamp TEXT
-        )
-    ''')
-    cursor.execute('''
-        INSERT INTO bp_logs (age, gender, systolic, diastolic, heart_rate, sleep, activity, predicted_bp, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (age, gender, systolic, diastolic, heart_rate, sleep, activity, prediction, datetime.now().isoformat()))
-    conn.commit()
+    model_sys = RandomForestRegressor()
+    model_dia = RandomForestRegressor()
 
-# --- Load Dataset ---
-def load_data():
-    if os.path.exists("sample_data.csv"):
-        df = pd.read_csv("sample_data.csv")
-        return df
-    else:
-        # generate dummy data if not available
-        np.random.seed(42)
-        df = pd.DataFrame({
-            "age": np.random.randint(25, 70, 100),
-            "gender": np.random.choice(["Male", "Female"], 100),
-            "systolic": np.random.normal(120, 15, 100),
-            "diastolic": np.random.normal(80, 10, 100),
-            "heart_rate": np.random.randint(60, 100, 100),
-            "sleep": np.random.uniform(4, 9, 100),
-            "activity": np.random.uniform(0, 10, 100)
-        })
-        df["gender"] = df["gender"].map({"Male": 0, "Female": 1})
-        df["bp_score"] = 0.6 * df["systolic"] + 0.4 * df["diastolic"]
-        df.to_csv("sample_data.csv", index=False)
-        return df
+    X = df[["age", "weight", "height", "bmi", "heart_rate"]]
+    y_sys = df["systolic"]
+    y_dia = df["diastolic"]
 
-# --- Model Training ---
-def train_model(df):
-    df["gender"] = df["gender"].map({"Male": 0, "Female": 1}) if df["gender"].dtype == 'O' else df["gender"]
-    X = df[["age", "gender", "heart_rate", "sleep", "activity"]]
-    y = 0.6 * df["systolic"] + 0.4 * df["diastolic"]
-    model = RandomForestRegressor()
-    model.fit(X, y)
-    return model
+    model_sys.fit(X, y_sys)
+    model_dia.fit(X, y_dia)
+    
+    return model_sys, model_dia
 
-# --- Predict BP Score ---
-def predict_bp(model, input_data):
-    prediction = model.predict(pd.DataFrame([input_data]))[0]
-    return round(prediction, 2)
+model_sys, model_dia = train_dummy_model()
 
-# --- Main App ---
-def main():
-    st.title("🩺 Smart Blood Pressure Monitoring System")
+# --- App UI ---
+st.title("🩺 Personalized Blood Pressure Prediction")
+st.markdown("### Input")
 
-    tab1, tab2, tab3 = st.tabs(["📊 Monitor", "📁 History", "ℹ️ About"])
-
-    with tab1:
-        st.header("Real-time BP Monitoring")
-
-        # Input
+with st.form("bp_form"):
+    col1, col2 = st.columns(2)
+    with col1:
         age = st.number_input("Age", min_value=1, max_value=120, step=1)
-        gender = st.selectbox("Gender", ["Male", "Female"])
-        systolic = st.slider("Systolic BP", 90, 180, 120)
-        diastolic = st.slider("Diastolic BP", 60, 120, 80)
-        heart_rate = st.slider("Heart Rate (bpm)", 50, 150, 75)
-        sleep = st.slider("Sleep Duration (hours)", 0.0, 12.0, 6.0)
-        activity = st.slider("Activity Level (0-10)", 0.0, 10.0, 5.0)
+        height = st.number_input("Height (cm)", min_value=100, max_value=220, value=170)
+        heart_rate = st.number_input("Heart Rate (bpm)", min_value=40, max_value=160, value=72)
+    with col2:
+        weight = st.number_input("Weight (kg)", min_value=30, max_value=200, value=70)
+        bmi = st.number_input("BMI", min_value=10.0, max_value=40.0, value=22.0)
 
-        if st.button("🔍 Predict BP Score"):
-            df = load_data()
-            model = train_model(df)
+    submitted = st.form_submit_button("Predict")
 
-            input_data = {
-                "age": age,
-                "gender": 0 if gender == "Male" else 1,
-                "heart_rate": heart_rate,
-                "sleep": sleep,
-                "activity": activity
-            }
+# --- Prediction Logic ---
+if submitted:
+    input_data = pd.DataFrame([{
+        "age": age,
+        "weight": weight,
+        "height": height,
+        "bmi": bmi,
+        "heart_rate": heart_rate
+    }])
 
-            prediction = predict_bp(model, input_data)
-            st.success(f"🧠 Predicted BP Score: **{prediction}**")
+    systolic = round(model_sys.predict(input_data)[0], 1)
+    diastolic = round(model_dia.predict(input_data)[0], 1)
 
-            save_to_database(age, gender, systolic, diastolic, heart_rate, sleep, activity, prediction)
-
-    with tab2:
-        st.header("📁 Patient History")
-
-        conn, cursor = get_connection()
-        cursor.execute("SELECT * FROM bp_logs ORDER BY timestamp DESC")
-        logs = cursor.fetchall()
-        conn.close()
-
-        if logs:
-            df = pd.DataFrame(logs, columns=["ID", "Age", "Gender", "Systolic", "Diastolic", "HeartRate", "Sleep", "Activity", "PredictedBP", "Time"])
-            st.dataframe(df)
-            st.line_chart(df["PredictedBP"])
-        else:
-            st.info("No history available.")
-
-    with tab3:
-        st.header("ℹ️ About This Project")
-        st.markdown("""
-        This is a **Smart Blood Pressure Monitoring System** developed using **Streamlit** and **Machine Learning**.
-        - Real-time BP prediction with ML
-        - Tracks user lifestyle like sleep and activity
-        - Visual logs and graphs
-        - Data stored in local SQLite database
-
-        _Developed for academic or healthcare innovation demo._
-        """)
-
-if __name__ == "__main__":
-    main()
+    st.markdown("### Prediction")
+    st.markdown(f"**Systolic Blood Pressure:** `{systolic} mmHg`")
+    st.markdown(f"**Diastolic Blood Pressure:** `{diastolic} mmHg`")
