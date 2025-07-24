@@ -23,7 +23,8 @@ This project is a Streamlit-based web application that predicts systolic and dia
 
 ## Live App
 
-[🔗 Click to open the deployed app]((https://smart-bp-monitoring-system.streamlit.app/))
+[🔗 Click to open the deployed app](https://smart-bp-monitoring-system.streamlit.app/)
+
 
 ## Output
 
